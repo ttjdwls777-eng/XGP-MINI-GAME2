@@ -3,11 +3,10 @@
   --bg1:#ff5b2f;
   --card:#1a1531;
   --card2:#0f0c22;
-  --line:#ffcc7a;
-  --line2:#ff9d2f;
   --txt:#fff3d7;
   --muted:rgba(255,243,215,.75);
   --gold:#ffd54a;
+  --warn:#ff3b5c;
   --shadow: 0 18px 55px rgba(0,0,0,.45);
 }
 
@@ -23,11 +22,7 @@ body{
   color:var(--txt);
 }
 
-.wrap{
-  max-width: 860px;
-  margin:0 auto;
-  padding: 22px 14px 30px;
-}
+.wrap{ max-width: 860px; margin:0 auto; padding: 22px 14px 30px; }
 
 .top{
   display:flex;
@@ -37,32 +32,20 @@ body{
   margin-bottom:12px;
 }
 
-.brand{
-  display:flex;
-  align-items:center;
-  gap:12px;
-}
+.brand{ display:flex; align-items:center; gap:12px; }
 .logo{
-  width:66px;
-  height:44px;
-  display:grid;
-  place-items:center;
+  width:66px; height:44px;
+  display:grid; place-items:center;
   border-radius:12px;
   background: rgba(0,0,0,.18);
   border:2px solid rgba(255,225,170,.35);
   box-shadow: var(--shadow);
-  color: var(--txt);
   font-size:14px;
 }
 .brandText .t1{ font-size:12px; }
 .brandText .t2{ font-size:9px; color: rgba(255,243,215,.82); margin-top:6px; }
 
-.hud{
-  display:flex;
-  gap:10px;
-  flex-wrap:wrap;
-  justify-content:flex-end;
-}
+.hud{ display:flex; gap:10px; flex-wrap:wrap; justify-content:flex-end; }
 .hudBox{
   min-width: 140px;
   background: rgba(0,0,0,.22);
@@ -94,8 +77,9 @@ canvas{
   display:block;
   width:100%;
   height:auto;
-  background: radial-gradient(900px 700px at 50% 30%, rgba(255,255,255,.06), transparent 60%),
-              linear-gradient(180deg, var(--card), var(--card2));
+  background:
+    radial-gradient(900px 700px at 50% 30%, rgba(255,255,255,.06), transparent 60%),
+    linear-gradient(180deg, var(--card), var(--card2));
   image-rendering: pixelated;
   touch-action:none;
 }
@@ -107,7 +91,7 @@ canvas{
   align-items:center;
   justify-content:center;
   padding:18px;
-  background: radial-gradient(700px 500px at 50% 25%, rgba(255,255,255,.12), rgba(0,0,0,.58));
+  background: radial-gradient(700px 500px at 50% 25%, rgba(255,255,255,.12), rgba(0,0,0,.62));
 }
 
 .panel{
@@ -122,6 +106,7 @@ canvas{
 .pTitle{ font-size:14px; margin-bottom:10px; }
 .pDesc{ font-size:9px; color: rgba(255,243,215,.78); line-height:1.6; margin-bottom:12px; }
 .gold{ color: var(--gold); }
+.warn{ color: var(--warn); }
 
 .row{
   display:grid;
@@ -129,9 +114,8 @@ canvas{
   gap:10px;
   margin-bottom:12px;
 }
-@media (max-width:760px){
-  .row{ grid-template-columns:1fr; }
-}
+@media (max-width:760px){ .row{ grid-template-columns:1fr; } }
+
 .rowBox{
   background: rgba(0,0,0,.18);
   border:2px solid rgba(255,210,120,.22);
@@ -157,6 +141,17 @@ canvas{
   color: var(--gold);
 }
 .hint{ font-size:8px; color: rgba(255,243,215,.7); line-height:1.4; }
+
+.finalLine{
+  margin: 8px 0 10px;
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(0,0,0,.18);
+  border:2px solid rgba(255,210,120,.22);
+  font-size: 9px;
+  color: rgba(255,243,215,.9);
+  line-height: 1.5;
+}
 
 .btnStart{
   width:100%;
@@ -190,13 +185,7 @@ canvas{
   font-size:9px;
 }
 
-.bottom{
-  margin-top:10px;
-  display:flex;
-  gap:10px;
-  align-items:center;
-  justify-content:space-between;
-}
+.bottom{ margin-top:10px; display:flex; gap:10px; align-items:center; justify-content:space-between; }
 .btnBottom{
   flex: 1;
   cursor:pointer;
