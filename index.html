@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
-  <title>XGP 미니게임2 - Archery</title>
+  <title>XGP 미니게임2 - XGP Archery</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
@@ -22,8 +22,8 @@
 
       <div class="hud">
         <div class="hudBox">
-          <div class="k">시간</div>
-          <div class="v"><span id="timeText">0.0</span>s</div>
+          <div class="k">남은시간</div>
+          <div class="v"><span id="timeText">30.0</span>s</div>
         </div>
         <div class="hudBox">
           <div class="k">XGP채굴수량</div>
@@ -40,12 +40,14 @@
       <div class="frame">
         <canvas id="game" width="480" height="820"></canvas>
 
+        <!-- Overlay (START / GAME OVER 공용) -->
         <div class="overlay" id="overlay">
           <div class="panel">
-            <div class="pTitle">XGP 양궁 미니게임</div>
-            <div class="pDesc">
-              파워는 자동(항상 강함)이고, <b>조준만</b> 하면 됩니다.<br/>
-              코인 중앙을 맞추면 <span class="gold">보너스</span>!
+            <div class="pTitle" id="ovTitle">XGP 양궁 미니게임</div>
+            <div class="pDesc" id="ovDesc">
+              파워는 자동(항상 강함)이고 <b>조준만</b> 하면 됩니다.<br/>
+              코인 중앙을 맞추면 <span class="gold">보너스</span>!<br/>
+              <span class="warn">⚠️ 경고(장애물)</span>을 맞추면 게임 오버!
             </div>
 
             <div class="row">
@@ -64,9 +66,11 @@
                   <button class="chip" data-diff="NORMAL">NORMAL</button>
                   <button class="chip" data-diff="HARD">HARD</button>
                 </div>
-                <div class="hint" id="diffHint">EASY: 타겟 빠름(기본) + 바람 없음</div>
+                <div class="hint" id="diffHint">EASY: 코인/장애물 기본 속도</div>
               </div>
             </div>
+
+            <div class="finalLine" id="ovFinal" style="display:none;"></div>
 
             <button class="btnStart" id="startBtn">START</button>
             <div class="pFoot">
@@ -83,7 +87,7 @@
       </div>
 
       <div class="help">
-        조작: PC는 A/D(좌우) + Space 발사 / 모바일은 드래그 조준 후 손 떼면 발사 · 목표: 코인 맞추기!
+        목표: 제한시간 동안 코인 맞춰 점수 획득 · ⚠️ 맞추면 즉시 게임오버!
       </div>
     </main>
   </div>
