@@ -13,6 +13,10 @@
   const resetBestBtn = document.getElementById("resetBestBtn");
   const resetBtn = document.getElementById("resetBtn");
 
+  const ovTitle = document.getElementById("ovTitle");
+  const ovDesc = document.getElementById("ovDesc");
+  const ovFinal = document.getElementById("ovFinal");
+
   const diffHint = document.getElementById("diffHint");
   const diffButtons = [...document.querySelectorAll(".chip")];
 
@@ -22,6 +26,91 @@
 
   const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
   const lerp = (a, b, t) => a + (b - a) * t;
+
+  // playfield (HUD 아래 ~ 바닥 위)
+  const TOP = 88;
+  const BOTTOM = H - 110;
+  const LEFT = 26;
+  const RIGHT = W - 26;
+
+  // ===== Audio (no files) =====
+  let audioCtx = null;
+  function ensureAudio() {
+    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
+  }
+  function beep({ type = "square", f0 = 700, f1 = 420, dur = 0.08, gain = 0.06 }) {
+    try {
+      ensureAudio();
+      if (!audioCtx) return;
+      const t = audioCtx.currentTime;
+      const o = audioCtx.createOscillator();
+      const g = audioCtx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(f0, t);
+      o.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
+      g.gain.setValueAtTime(0.0001, t);
+      g.gain.exponentialRampToValueAtTime(gain, t + 0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+      o.connect(g); g.connect(audioCtx.destination);
+      o.start(t); o.stop(t + dur + 0.02);
+    } catch {}
+  }
+  const sfx = {
+    shoot() { beep({ type: "square", f0: 520, f1: 260, dur: 0.07, gain: 0.05 }); },
+    hit()   { beep({ type: "triangle", f0: 980, f1: 520, dur: 0.09, gain: 0.06 }); },
+    crit()  { beep({ type: "sawtooth", f0: 1400, f1: 700, dur: 0.11, gain: 0.06 }); },
+    boom()  { beep({ type: "sawtooth", f0: 220, f1: 70, dur: 0.14, gain: 0.07 }); },
+    timeup(){ beep({ type: "triangle", f0: 420, f1: 140, dur: 0.18, gain: 0.06 }); },
+  };
+
+  // ===== Difficulty =====
+  const DIFF = {
+    EASY:   { coins: 3, hazards: 4, move: 1.00, wind: 0.0, arrowCd: 210, bonus: 1.00, time: 30 },
+    NORMAL: { coins: 4, hazards: 6, move: 1.25, wind: 0.9, arrowCd: 250, bonus: 1.08, time: 30 },
+    HARD:   { coins: 5, hazards: 8, move: 1.45, wind: 1.6, arrowCd: 300, bonus: 1.15, time: 30 },
+  };
+  const DIFF_HINTS = {
+    EASY:   "EASY: 코인/장애물 기본 속도",
+    NORMAL: "NORMAL: 더 빠름 + 바람",
+    HARD:   "HARD: 매우 빠름 + 강한 바람",
+  };
+
+  let difficulty = "EASY";
+  function setDifficulty(d) {
+    difficulty = d;
+    diffButtons.forEach(b => b.classList.toggle("is-on", b.dataset.diff === d));
+    diffHint.textContent = DIFF_HINTS[d] || "";
+    diffText.textContent = d;
+  }
+  diffButtons.forEach(btn => btn.addEventListener("click", () => setDifficulty(btn.dataset.diff)));
+  setDifficulty("EASY");
+
+  // ===== Best =====
+  const BEST_KEY = "xgp_archery_best_v5";
+  let best = Number(localStorage.getItem(BEST_KEY) || 0);
+
+  // ===== Game State =====
+  let running = false;
+  let lastTs = 0;
+
+  let elapsed = 0;
+  let score = 0;
+  let remaining = DIFF[difficulty].time;
+
+  const player = { x: W / 2, y: H - 92, r: 18 };
+  const aim = { angle: -Math.PI / 2 };
+
+  let arrows = [];
+  let coins = [];
+  let hazards = [];
+  let particles = [];
+  let popups = [];
+
+  let arrowCooldown = 0;
+
+  // ===== Helpers =====
+  function rnd(min, max) { return min + Math.random() * (max - min); }
 
   function drawRoundedRect(x, y, w, h, r) {
     r = Math.min(r, w / 2, h / 2);
@@ -34,88 +123,6 @@
     ctx.closePath();
   }
 
-  // ===== Audio (no files, GitHub Pages friendly) =====
-  let audioCtx = null;
-  function ensureAudio() {
-    if (!audioCtx) audioCtx = new (window.AudioContext || window.webkitAudioContext)();
-    if (audioCtx.state === "suspended") audioCtx.resume().catch(() => {});
-  }
-
-  function beep({ type = "square", f0 = 700, f1 = 420, dur = 0.08, gain = 0.06 }) {
-    try {
-      ensureAudio();
-      if (!audioCtx) return;
-
-      const t = audioCtx.currentTime;
-      const o = audioCtx.createOscillator();
-      const g = audioCtx.createGain();
-
-      o.type = type;
-      o.frequency.setValueAtTime(f0, t);
-      o.frequency.exponentialRampToValueAtTime(Math.max(40, f1), t + dur);
-
-      g.gain.setValueAtTime(0.0001, t);
-      g.gain.exponentialRampToValueAtTime(gain, t + 0.01);
-      g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-
-      o.connect(g);
-      g.connect(audioCtx.destination);
-
-      o.start(t);
-      o.stop(t + dur + 0.02);
-    } catch {}
-  }
-
-  const sfx = {
-    shoot() { beep({ type: "square", f0: 520, f1: 260, dur: 0.07, gain: 0.05 }); },
-    hit()   { beep({ type: "triangle", f0: 980, f1: 520, dur: 0.09, gain: 0.06 }); },
-    crit()  { beep({ type: "sawtooth", f0: 1400, f1: 700, dur: 0.11, gain: 0.06 }); },
-  };
-
-  // ===== Difficulty =====
-  const DIFF = {
-    EASY:   { targetSpeed: 120, arrowCd: 210, wind: 0.0, bonus: 1.00 },
-    NORMAL: { targetSpeed: 155, arrowCd: 260, wind: 0.9, bonus: 1.08 },
-    HARD:   { targetSpeed: 190, arrowCd: 310, wind: 1.6, bonus: 1.15 },
-  };
-  const DIFF_HINT = {
-    EASY:   "EASY: 타겟 빠름(기본) + 바람 없음",
-    NORMAL: "NORMAL: 타겟 더 빠름 + 약간의 바람",
-    HARD:   "HARD: 타겟 매우 빠름 + 강한 바람",
-  };
-
-  let difficulty = "EASY";
-
-  function setDifficulty(d) {
-    difficulty = d;
-    diffButtons.forEach(b => b.classList.toggle("is-on", b.dataset.diff === d));
-    if (diffHint) diffHint.textContent = DIFF_HINT[d] || "";
-    if (diffText) diffText.textContent = d;
-  }
-  diffButtons.forEach(btn => btn.addEventListener("click", () => setDifficulty(btn.dataset.diff)));
-  setDifficulty("EASY");
-
-  // ===== Best Score =====
-  const BEST_KEY = "xgp_archery_best_v4";
-  let best = Number(localStorage.getItem(BEST_KEY) || 0);
-
-  // ===== Game State =====
-  let running = false;
-  let lastTs = 0;
-  let elapsed = 0;
-  let score = 0;
-
-  const player = { x: W / 2, y: H - 96, r: 18 };
-  const aim = { angle: -Math.PI / 2 };
-
-  let arrows = [];
-  let targets = [];
-  let particles = []; // small spark pixels
-  let popups = [];    // floating score text
-
-  let arrowCooldown = 0;
-
-  // ===== Aim: pointer + keyboard =====
   function canvasToLocal(clientX, clientY) {
     const rect = canvas.getBoundingClientRect();
     const sx = (clientX - rect.left) / rect.width;
@@ -130,65 +137,6 @@
     if (dy > 0) return; // 아래쪽 조준 금지
     aim.angle = Math.atan2(dy, dx);
     aim.angle = clamp(aim.angle, -Math.PI + 0.25, -0.25);
-  }
-
-  canvas.addEventListener("pointerdown", (e) => {
-    ensureAudio(); // 모바일 오디오 잠금 해제
-    updateAimFromPointer(e.clientX, e.clientY);
-    canvas.setPointerCapture(e.pointerId);
-  });
-  canvas.addEventListener("pointermove", (e) => updateAimFromPointer(e.clientX, e.clientY));
-  canvas.addEventListener("pointerup", () => { if (running) shoot(); });
-
-  const keys = new Set();
-  window.addEventListener("keydown", (e) => {
-    if (["ArrowLeft","ArrowRight"," ","Space"].includes(e.key)) e.preventDefault();
-    keys.add(e.key);
-
-    if (e.key === " " || e.key === "Space") {
-      ensureAudio();
-      if (running) shoot();
-    }
-    if (e.key === "r" || e.key === "R") resetRound();
-  });
-  window.addEventListener("keyup", (e) => keys.delete(e.key));
-
-  // ===== UI Buttons =====
-  startBtn.addEventListener("click", () => {
-    overlay.style.display = "none";
-    startRound();
-  });
-
-  resetBestBtn.addEventListener("click", () => {
-    localStorage.removeItem(BEST_KEY);
-    best = 0;
-    bestText.textContent = "0";
-  });
-
-  resetBtn.addEventListener("click", () => resetRound());
-
-  // ===== Targets =====
-  function spawnTargets() {
-    const y0 = 150;
-    const gap = 92;
-    const base = [
-      { points: 10, core: 11, r: 18 },
-      { points: 25, core: 12, r: 19 },
-      { points: 50, core: 13, r: 20 },
-    ];
-
-    targets = base.map((t, i) => ({
-      x: lerp(110, W - 110, (i + 1) / 4),
-      y: y0 + i * gap,
-      w: 210,
-      h: 52,
-      r: t.r,
-      core: t.core,
-      points: t.points,
-      vx: (i % 2 === 0 ? 1 : -1) * (DIFF[difficulty].targetSpeed + i * 16),
-      hitFlash: 0,
-      spin: Math.random(),
-    }));
   }
 
   // ===== FX =====
@@ -206,21 +154,20 @@
       });
     }
   }
-
-  function addPopup(x, y, text, isCrit) {
+  function addPopup(x, y, text, isCrit, colorKind = "gold") {
     popups.push({
       x, y,
-      vy: -60 - Math.random() * 30,
+      vy: -70 - Math.random() * 35,
       t: 0,
-      life: 0.75,
+      life: 0.8,
       text,
       isCrit,
+      colorKind,
     });
   }
 
-  // ===== XGP Coin Draw (enhanced) =====
+  // ===== Draw: XGP Coin =====
   function drawXGPCoin(x, y, r, spinT = 0) {
-    // fake 3D thickness by vertical offset + ellipse wobble
     const wobble = 0.80 + 0.20 * Math.sin(spinT * Math.PI * 2);
     const rx = r * wobble;
     const ry = r;
@@ -228,7 +175,7 @@
     ctx.save();
     ctx.translate(x, y);
 
-    // drop shadow
+    // shadow
     ctx.globalAlpha = 0.45;
     ctx.fillStyle = "rgba(0,0,0,0.45)";
     ctx.beginPath();
@@ -236,13 +183,12 @@
     ctx.fill();
     ctx.globalAlpha = 1;
 
-    // thickness (side)
+    // thickness
     ctx.fillStyle = "rgba(140,70,0,0.55)";
     ctx.beginPath();
     ctx.ellipse(0, 5, rx, ry * 0.98, 0, 0, Math.PI * 2);
     ctx.fill();
 
-    // main face gradient
     const g = ctx.createRadialGradient(-rx * 0.35, -ry * 0.35, r * 0.18, 0, 0, r * 1.25);
     g.addColorStop(0, "rgba(255,250,210,0.98)");
     g.addColorStop(0.35, "rgba(255,213,74,0.98)");
@@ -279,7 +225,7 @@
     ctx.fill();
     ctx.stroke();
 
-    // sparkle stripe (animated)
+    // sparkle stripe
     ctx.save();
     ctx.globalAlpha = 0.18 + 0.22 * (0.5 + 0.5 * Math.sin(spinT * Math.PI * 2));
     ctx.fillStyle = "rgba(255,255,255,0.95)";
@@ -293,38 +239,100 @@
     ctx.font = `${Math.max(9, r * 0.62)}px "Press Start 2P", system-ui`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
-
     ctx.fillStyle = "rgba(120,60,0,0.55)";
     ctx.fillText("XGP", 1, 2);
-
     ctx.fillStyle = "rgba(58,24,0,0.92)";
     ctx.fillText("XGP", 0, 0);
+    ctx.restore();
 
     ctx.restore();
+  }
+
+  // ===== Draw: Warning Hazard (triangle) =====
+  function drawWarning(x, y, r, blinkT) {
+    const blink = 0.55 + 0.45 * Math.sin(blinkT * Math.PI * 2);
+    ctx.save();
+    ctx.translate(x, y);
+
+    // glow
+    ctx.globalAlpha = 0.25 + 0.25 * blink;
+    ctx.fillStyle = "rgba(255,59,92,0.85)";
+    ctx.beginPath();
+    ctx.arc(0, 0, r * 1.35, 0, Math.PI * 2);
+    ctx.fill();
+
+    // triangle body
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = "rgba(255,59,92,0.95)";
+    ctx.strokeStyle = "rgba(255,230,230,0.75)";
+    ctx.lineWidth = 3;
+
+    ctx.beginPath();
+    ctx.moveTo(0, -r);
+    ctx.lineTo(r * 0.9, r * 0.8);
+    ctx.lineTo(-r * 0.9, r * 0.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+
+    // exclamation
+    ctx.fillStyle = "rgba(255,255,255,0.92)";
+    ctx.fillRect(-2, -r * 0.35, 4, r * 0.55);
+    ctx.fillRect(-2, r * 0.35, 4, 4);
+
     ctx.restore();
   }
 
-  // ===== Collision =====
-  function arrowHitsTarget(ar, t) {
-    const left = t.x - t.w / 2;
-    const right = t.x + t.w / 2;
-    const top = t.y - t.h / 2;
-    const bottom = t.y + t.h / 2;
-    return !(ar.x < left || ar.x > right || ar.y < top || ar.y > bottom);
+  // ===== Spawn =====
+  function spawnEntities() {
+    const cfg = DIFF[difficulty];
+    coins = [];
+    hazards = [];
+
+    // coins
+    for (let i = 0; i < cfg.coins; i++) {
+      const r = 18 + i * 1.5;
+      const points = i === cfg.coins - 1 ? 50 : (i === 0 ? 10 : 25);
+      const core = 10 + i * 0.8;
+      coins.push({
+        x: rnd(LEFT + r, RIGHT - r),
+        y: rnd(TOP + r, BOTTOM - 180),
+        r,
+        core,
+        points,
+        vx: rnd(-120, 120) * cfg.move,
+        vy: rnd(-90, 90) * cfg.move,
+        spin: Math.random(),
+      });
+    }
+
+    // hazards
+    for (let i = 0; i < cfg.hazards; i++) {
+      const r = 16 + (i % 3);
+      hazards.push({
+        x: rnd(LEFT + r, RIGHT - r),
+        y: rnd(TOP + r, BOTTOM - 140),
+        r,
+        vx: rnd(-150, 150) * cfg.move,
+        vy: rnd(-120, 120) * cfg.move,
+        blink: Math.random(),
+      });
+    }
   }
 
-  function isCriticalHit(ar, t) {
-    // critical if arrow hits near coin center
-    const dx = ar.x - t.x;
-    const dy = ar.y - t.y;
-    return Math.hypot(dx, dy) <= t.core;
+  // ===== Collisions =====
+  function hitCircle(ax, ay, bx, by, br) {
+    const dx = ax - bx;
+    const dy = ay - by;
+    return (dx * dx + dy * dy) <= (br * br);
   }
 
-  // ===== Shooting (fixed power) =====
+  // ===== Shooting =====
   function shoot() {
+    if (!running) return;
     if (arrowCooldown > 0) return;
 
-    const power = 1500; // always strong
+    const power = 1500; // 항상 강함
     let angle = aim.angle;
     angle = clamp(angle, -Math.PI + 0.25, -0.25);
 
@@ -341,35 +349,98 @@
     sfx.shoot();
   }
 
-  // ===== Game flow =====
+  // ===== Game Flow =====
+  function showStartOverlay() {
+    ovTitle.textContent = "XGP 양궁 미니게임";
+    ovDesc.innerHTML =
+      `파워는 자동(항상 강함)이고 <b>조준만</b> 하면 됩니다.<br/>
+       코인 중앙을 맞추면 <span class="gold">보너스</span>!<br/>
+       <span class="warn">⚠️ 경고(장애물)</span>을 맞추면 게임 오버!`;
+    ovFinal.style.display = "none";
+    startBtn.textContent = "START";
+    overlay.style.display = "flex";
+  }
+
+  function gameOver(reason) {
+    running = false;
+
+    if (reason === "TIME") sfx.timeup();
+    else sfx.boom();
+
+    const rText = reason === "TIME" ? "시간 종료!" : "⚠️ 경고를 맞췄습니다!";
+    ovTitle.textContent = "GAME OVER";
+    ovDesc.innerHTML =
+      `<span class="warn">${rText}</span><br/>
+       최종 점수와 최고기록을 확인하세요.`;
+
+    ovFinal.style.display = "block";
+    ovFinal.innerHTML =
+      `최종 점수: <span class="gold">${score}</span><br/>` +
+      `최고 기록: <span class="gold">${best}</span>`;
+
+    startBtn.textContent = "RETRY";
+    overlay.style.display = "flex";
+  }
+
   function startRound() {
+    ensureAudio();
     running = true;
+    lastTs = performance.now();
+
     elapsed = 0;
     score = 0;
+    remaining = DIFF[difficulty].time;
 
     arrows = [];
     particles = [];
     popups = [];
     arrowCooldown = 0;
 
-    spawnTargets();
-    lastTs = performance.now();
-
+    spawnEntities();
     updateHud();
+    overlay.style.display = "none";
     requestAnimationFrame(loop);
   }
 
-  function resetRound() {
+  function resetRoundToOverlay() {
     running = false;
-    overlay.style.display = "flex";
-    // keep best
+    showStartOverlay();
   }
 
   function updateHud() {
-    timeText.textContent = elapsed.toFixed(1);
+    timeText.textContent = remaining.toFixed(1);
     scoreText.textContent = String(score);
     bestText.textContent = String(best);
   }
+
+  // ===== Input =====
+  canvas.addEventListener("pointerdown", (e) => {
+    ensureAudio();
+    updateAimFromPointer(e.clientX, e.clientY);
+    canvas.setPointerCapture(e.pointerId);
+  });
+  canvas.addEventListener("pointermove", (e) => updateAimFromPointer(e.clientX, e.clientY));
+  canvas.addEventListener("pointerup", () => shoot());
+
+  const keys = new Set();
+  window.addEventListener("keydown", (e) => {
+    if (["ArrowLeft","ArrowRight"," ","Space"].includes(e.key)) e.preventDefault();
+    keys.add(e.key);
+
+    if (e.key === " " || e.key === "Space") shoot();
+    if (e.key === "r" || e.key === "R") resetRoundToOverlay();
+  });
+  window.addEventListener("keyup", (e) => keys.delete(e.key));
+
+  // ===== UI =====
+  startBtn.addEventListener("click", () => startRound());
+  resetBtn.addEventListener("click", () => resetRoundToOverlay());
+
+  resetBestBtn.addEventListener("click", () => {
+    localStorage.removeItem(BEST_KEY);
+    best = 0;
+    bestText.textContent = "0";
+  });
 
   // ===== Loop =====
   function loop(ts) {
@@ -387,6 +458,18 @@
 
   function update(dt, dtMs) {
     elapsed += dt;
+    remaining = Math.max(0, DIFF[difficulty].time - elapsed);
+
+    if (remaining <= 0) {
+      if (score > best) {
+        best = score;
+        localStorage.setItem(BEST_KEY, String(best));
+      }
+      updateHud();
+      gameOver("TIME");
+      return;
+    }
+
     arrowCooldown = Math.max(0, arrowCooldown - dtMs);
 
     // keyboard fine aim
@@ -396,20 +479,34 @@
     if (right) aim.angle += dt * 1.7;
     aim.angle = clamp(aim.angle, -Math.PI + 0.25, -0.25);
 
-    // targets
-    const wind = DIFF[difficulty].wind;
-    for (const t of targets) {
-      t.spin = (t.spin + dt * 0.7) % 1;
-      t.x += t.vx * dt;
+    const cfg = DIFF[difficulty];
+    const wind = cfg.wind;
 
-      const pad = t.w / 2 + 16;
-      if (t.x < pad) { t.x = pad; t.vx *= -1; }
-      if (t.x > W - pad) { t.x = W - pad; t.vx *= -1; }
+    // coins move & bounce
+    for (const c of coins) {
+      c.spin = (c.spin + dt * 0.85) % 1;
+      c.x += c.vx * dt;
+      c.y += c.vy * dt;
 
-      t.hitFlash = Math.max(0, t.hitFlash - dt * 3);
+      if (c.x < LEFT + c.r) { c.x = LEFT + c.r; c.vx *= -1; }
+      if (c.x > RIGHT - c.r) { c.x = RIGHT - c.r; c.vx *= -1; }
+      if (c.y < TOP + c.r) { c.y = TOP + c.r; c.vy *= -1; }
+      if (c.y > BOTTOM - c.r) { c.y = BOTTOM - c.r; c.vy *= -1; }
     }
 
-    // arrows
+    // hazards move & bounce
+    for (const h of hazards) {
+      h.blink = (h.blink + dt * 1.4) % 1;
+      h.x += h.vx * dt;
+      h.y += h.vy * dt;
+
+      if (h.x < LEFT + h.r) { h.x = LEFT + h.r; h.vx *= -1; }
+      if (h.x > RIGHT - h.r) { h.x = RIGHT - h.r; h.vx *= -1; }
+      if (h.y < TOP + h.r) { h.y = TOP + h.r; h.vy *= -1; }
+      if (h.y > BOTTOM - h.r) { h.y = BOTTOM - h.r; h.vy *= -1; }
+    }
+
+    // arrows physics
     const g = 780;
     for (const ar of arrows) {
       ar.vy += g * dt;
@@ -422,30 +519,53 @@
 
       if (ar.y > H + 80 || ar.x < -80 || ar.x > W + 80) ar.alive = false;
 
-      if (ar.alive) {
-        for (const t of targets) {
-          if (arrowHitsTarget(ar, t)) {
-            ar.alive = false;
-            t.hitFlash = 1;
+      if (!ar.alive) continue;
 
-            const crit = isCriticalHit(ar, t);
-            let add = t.points;
-            if (crit) add = Math.round(add * 2);
+      // hit hazard -> GAME OVER
+      for (const h of hazards) {
+        if (hitCircle(ar.x, ar.y, h.x, h.y, h.r * 0.95)) {
+          ar.alive = false;
+          burst(h.x, h.y, 36, "red");
+          addPopup(h.x, h.y - 6, "BOOM", true, "red");
 
-            add = Math.round(add * DIFF[difficulty].bonus);
-            score += add;
-
-            // FX
-            burst(ar.x, ar.y, crit ? 30 : 18, crit ? "gold" : "red");
-            addPopup(ar.x, ar.y - 6, `+${add}`, crit);
-            if (crit) sfx.crit(); else sfx.hit();
-
-            if (score > best) {
-              best = score;
-              localStorage.setItem(BEST_KEY, String(best));
-            }
-            break;
+          if (score > best) {
+            best = score;
+            localStorage.setItem(BEST_KEY, String(best));
           }
+          updateHud();
+          gameOver("HAZARD");
+          return;
+        }
+      }
+
+      // hit coin -> score
+      for (const c of coins) {
+        if (hitCircle(ar.x, ar.y, c.x, c.y, c.r * 0.95)) {
+          ar.alive = false;
+
+          const crit = hitCircle(ar.x, ar.y, c.x, c.y, c.core);
+          let add = c.points;
+          if (crit) add = Math.round(add * 2);
+          add = Math.round(add * cfg.bonus);
+
+          score += add;
+          if (score > best) {
+            best = score;
+            localStorage.setItem(BEST_KEY, String(best));
+          }
+
+          burst(c.x, c.y, crit ? 30 : 18, crit ? "gold" : "mint");
+          addPopup(c.x, c.y - 6, `+${add}`, crit, "gold");
+          if (crit) sfx.crit(); else sfx.hit();
+
+          // coin reposition (계속 게임 진행)
+          c.x = rnd(LEFT + c.r, RIGHT - c.r);
+          c.y = rnd(TOP + c.r, BOTTOM - 180);
+          c.vx = rnd(-140, 140) * cfg.move;
+          c.vy = rnd(-110, 110) * cfg.move;
+          c.spin = Math.random();
+
+          break;
         }
       }
     }
@@ -476,7 +596,7 @@
   function render() {
     ctx.clearRect(0, 0, W, H);
 
-    // subtle star dust
+    // star dust
     ctx.save();
     ctx.globalAlpha = 0.18;
     for (let i = 0; i < 90; i++) {
@@ -487,37 +607,25 @@
     }
     ctx.restore();
 
-    // targets as boards + XGP coins
-    for (const t of targets) {
-      const x = t.x - t.w / 2;
-      const y = t.y - t.h / 2;
+    // subtle playfield border
+    ctx.save();
+    ctx.strokeStyle = "rgba(255,210,120,0.14)";
+    ctx.lineWidth = 2;
+    drawRoundedRect(LEFT, TOP, RIGHT - LEFT, BOTTOM - TOP, 18);
+    ctx.stroke();
+    ctx.restore();
 
-      // board
-      ctx.save();
-      const flash = t.hitFlash;
-      ctx.fillStyle = `rgba(8,8,20,${0.55 + flash * 0.10})`;
-      ctx.strokeStyle = flash > 0 ? "rgba(255,213,74,0.85)" : "rgba(255,210,120,0.22)";
-      ctx.lineWidth = 3;
-
-      drawRoundedRect(x, y, t.w, t.h, 16);
-      ctx.fill();
-      ctx.stroke();
-
-      // coin center
-      drawXGPCoin(t.x, t.y, t.r, t.spin);
-
-      // points label
-      ctx.globalAlpha = 0.75;
-      ctx.fillStyle = "rgba(255,243,215,0.85)";
-      ctx.font = `10px "Press Start 2P", system-ui`;
-      ctx.textAlign = "center";
-      ctx.textBaseline = "top";
-      ctx.fillText(`+${t.points}`, t.x, t.y + 26);
-
-      ctx.restore();
+    // hazards
+    for (const h of hazards) {
+      drawWarning(h.x, h.y, h.r, h.blink);
     }
 
-    // popups (floating score)
+    // coins
+    for (const c of coins) {
+      drawXGPCoin(c.x, c.y, c.r, c.spin);
+    }
+
+    // popups
     for (const s of popups) {
       const a = 1 - (s.t / s.life);
       ctx.save();
@@ -526,11 +634,11 @@
       ctx.textAlign = "center";
       ctx.textBaseline = "middle";
 
-      // outline
       ctx.fillStyle = "rgba(0,0,0,0.55)";
       ctx.fillText(s.text, s.x + 1, s.y + 2);
 
-      ctx.fillStyle = s.isCrit ? "rgba(255,213,74,0.95)" : "rgba(255,243,215,0.92)";
+      if (s.colorKind === "red") ctx.fillStyle = "rgba(255,59,92,0.95)";
+      else ctx.fillStyle = s.isCrit ? "rgba(255,213,74,0.95)" : "rgba(255,243,215,0.92)";
       ctx.fillText(s.text, s.x, s.y);
       ctx.restore();
     }
@@ -552,7 +660,7 @@
     ctx.stroke();
     ctx.restore();
 
-    // bow + aim line
+    // bow + aim guide
     const bowLen = 54;
     const ax = Math.cos(aim.angle), ay = Math.sin(aim.angle);
     const bx = player.x + ax * bowLen;
@@ -581,6 +689,7 @@
       ctx.save();
       ctx.translate(ar.x, ar.y);
       ctx.rotate(ar.rot);
+
       ctx.fillStyle = "rgba(255,243,215,0.92)";
       ctx.fillRect(-18, -2, 28, 4);
 
@@ -594,10 +703,11 @@
 
       ctx.fillStyle = "rgba(46,242,194,0.95)";
       ctx.fillRect(-24, -5, 4, 10);
+
       ctx.restore();
     }
 
-    // spark particles
+    // particles
     for (const p of particles) {
       const a = 1 - (p.t / p.life);
       ctx.save();
@@ -605,7 +715,8 @@
 
       if (p.kind === "gold") ctx.fillStyle = "rgba(255,213,74,0.95)";
       else if (p.kind === "red") ctx.fillStyle = "rgba(255,59,92,0.90)";
-      else ctx.fillStyle = "rgba(46,242,194,0.90)";
+      else if (p.kind === "mint") ctx.fillStyle = "rgba(46,242,194,0.90)";
+      else ctx.fillStyle = "rgba(255,255,255,0.75)";
 
       ctx.fillRect(p.x, p.y, 3, 3);
       ctx.restore();
@@ -615,6 +726,14 @@
   // ===== Init =====
   bestText.textContent = String(best);
   scoreText.textContent = "0";
-  timeText.textContent = "0.0";
-  overlay.style.display = "flex";
+  timeText.textContent = String(DIFF[difficulty].time.toFixed(1));
+  showStartOverlay();
+
+  // Keep hint/diff text updated if user changes difficulty before start
+  diffButtons.forEach(btn => {
+    btn.addEventListener("click", () => {
+      // if not running, update displayed time (still 30s but keep consistent)
+      if (!running) timeText.textContent = String(DIFF[difficulty].time.toFixed(1));
+    });
+  });
 })();
