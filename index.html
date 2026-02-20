@@ -1,0 +1,103 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <title>XGP 미니게임 - 화살 점수판</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <!-- 픽셀 느낌 폰트(선택). 로컬만 쓰고 싶으면 제거해도 OK -->
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="wrap">
+    <header class="topbar">
+      <div class="brand">
+        <div class="badge">XGP</div>
+        <div class="title">
+          <div class="h1">채굴 미니게임</div>
+          <div class="h2">화살로 점수판 맞추기</div>
+        </div>
+      </div>
+
+      <div class="hud">
+        <div class="hud-item">
+          <div class="k">시간</div>
+          <div class="v"><span id="timeText">0.0</span> s</div>
+        </div>
+        <div class="hud-item">
+          <div class="k">XGP채굴수량</div>
+          <div class="v" id="scoreText">0</div>
+        </div>
+        <div class="hud-item">
+          <div class="k">최고</div>
+          <div class="v" id="bestText">0</div>
+        </div>
+      </div>
+    </header>
+
+    <main class="stage-card">
+      <div class="canvas-shell">
+        <canvas id="game" width="480" height="800" aria-label="game canvas"></canvas>
+
+        <!-- 오버레이 -->
+        <div class="overlay" id="overlay">
+          <div class="panel">
+            <div class="panel-title">시작 준비!</div>
+            <div class="panel-desc">
+              화살을 쏴서 위쪽 점수판을 맞추세요.<br/>
+              <span class="accent">노란 코어(중앙)</span>를 맞추면 보너스!
+            </div>
+
+            <div class="panel-grid">
+              <div class="panel-box">
+                <div class="box-title">조작</div>
+                <div class="box-desc">
+                  PC: ← → / A D 로 조준, <b>Space</b> 발사<br/>
+                  마우스: 드래그로 조준, 놓으면 발사<br/>
+                  모바일: 화면 드래그로 조준, 놓으면 발사
+                </div>
+              </div>
+              <div class="panel-box">
+                <div class="box-title">난이도</div>
+                <div class="box-desc">
+                  <div class="diff">
+                    <button class="chip is-on” data-diff="EASY">EASY</button>
+                    <button class="chip" data-diff="NORMAL">NORMAL</button>
+                    <button class="chip" data-diff="HARD">HARD</button>
+                  </div>
+                  <div class="tiny" id="diffHint">EASY: 느린 타겟 + 넉넉한 연사</div>
+                </div>
+              </div>
+            </div>
+
+            <button class="start" id="startBtn">START</button>
+
+            <div class="footerline">
+              <button class="ghost" id="resetBestBtn" title="기록 초기화">기록 리셋</button>
+              <div class="tiny">GitHub Pages에 올리면 바로 실행됩니다.</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- 하단 도움말 -->
+        <div class="hintbar">
+          <span class="dot"></span>
+          <span>조준 후 발사! 중앙 코어 보너스</span>
+          <span class="sep">|</span>
+          <span>R: 리셋</span>
+        </div>
+      </div>
+    </main>
+
+    <footer class="foot">
+      <span>© Mini Game</span>
+      <span class="sep">·</span>
+      <span>Made for GitHub Pages</span>
+    </footer>
+  </div>
+
+  <script src="game.js"></script>
+</body>
+</html>
